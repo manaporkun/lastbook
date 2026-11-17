@@ -26,6 +26,7 @@ const MapView = (() => {
     ['fire', 'Fire stations', 'F', '#ef6c00', 'fire_station', 'help'],
     ['police', 'Police', 'P', '#1a4f9c', 'police', 'help'],
     ['shelter', 'Shelters (structures)', '⌂', '#455a64', 'shelter', 'help'],
+    ['assembly', 'Disaster assembly areas (open air)', 'A', '#00796b', 'assembly_point', 'help'],
     ['community', 'Community centers, town halls & libraries', 'C', '#8e24aa', 'community_centre,town_hall,library', 'help'],
     ['water', 'Drinking-water taps', 'W', '#0277bd', 'drinking_water', 'water'],
     ['reservoir', 'Reservoirs & named lakes', '≈', '#1565c0', 'reservoir,lake', 'water'],
@@ -46,8 +47,8 @@ const MapView = (() => {
   ].map(([id, label, sym, col, cls, group]) => ({ id, label, sym, col, cls: cls.split(','), group }));
   const GROUPS = [['help', 'Emergency help'], ['water', 'Water'], ['supply', 'Supplies & camping'], ['food', 'Food that keeps growing (2025 crop maps)'], ['resource', 'Natural resources (historical records)']];
   const BY_CLS = {}; for (const l of LAYERS) for (const c of l.cls) BY_CLS[c] = l;
-  const DEFAULT_LAYERS = ['hospital', 'clinic', 'pharmacy', 'fire', 'police', 'shelter', 'water', 'reservoir', 'fish', 'boat'];
-  const PRESETS = [['Emergency', ['hospital', 'clinic', 'dentist', 'pharmacy', 'fire', 'police', 'shelter', 'community']], ['Water', ['water', 'spring', 'reservoir', 'pond', 'dam', 'fish', 'boat']],
+  const DEFAULT_LAYERS = ['hospital', 'clinic', 'pharmacy', 'fire', 'police', 'shelter', 'assembly', 'water', 'reservoir', 'fish', 'boat'];
+  const PRESETS = [['Emergency', ['hospital', 'clinic', 'dentist', 'pharmacy', 'fire', 'police', 'shelter', 'assembly', 'community']], ['Water', ['water', 'spring', 'reservoir', 'pond', 'dam', 'fish', 'boat']],
     ['Supplies', ['food', 'hardware', 'fuel', 'camp']], ['Food trees', ['orchard', 'vineyard', 'berries']], ['Resources', ['fish', 'boat', 'mineral', 'well']], ['All', LAYERS.map(l => l.id)]];
   const LEGACY = { all_resources: ['fish', 'boat', 'mineral', 'well'], mineral: ['mineral'], oil_gas_well: ['well'], fish_stocking: ['fish'], boat_launch: ['boat'] };
   const FIELD = { commod1: 'Commodity', commod2: 'Also', commod3: 'Also', ore: 'Ore', dev_stat: 'Recorded status', oper_type: 'Operation', yr_lst_prd: 'Last production year',
@@ -68,7 +69,7 @@ const MapView = (() => {
     vineyard: 'USDA 2025 satellite crop map: usually right for big orchards, sometimes wrong for small ones. Trees and vines keep producing for decades but need water in dry regions and winter pruning. Private farmland — ask first.',
     berries: 'USDA 2025 satellite crop map: usually right for big orchards, sometimes wrong for small ones. Trees and vines keep producing for decades but need water in dry regions and winter pruning. Private farmland — ask first.',
     perennial_veg: 'USDA 2025 satellite crop map: usually right for big orchards, sometimes wrong for small ones. Trees and vines keep producing for decades but need water in dry regions and winter pruning. Private farmland — ask first.',
-    pond: 'Small ponds are often livestock ponds with manure runoff: treat the water and cook any fish thoroughly. Small ponds can be fished out in weeks.', spring: 'Mapped spring — treat the water before drinking.', drinking_water: 'Mapped tap; may be off in an emergency.' };
+    pond: 'Small ponds are often livestock ponds with manure runoff: treat the water and cook any fish thoroughly. Small ponds can be fished out in weeks.', spring: 'Mapped spring — treat the water before drinking.', drinking_water: 'Mapped tap; may be off in an emergency.', assembly_point: 'Mapped open-air earthquake or evacuation assembly point, not an indoor shelter. Stay clear of damaged buildings, walls and power lines.' };
   let st = null, world = null, geography = null;
 
   const load = (k, d) => { try { return JSON.parse(localStorage.getItem('sg.' + k)) ?? d } catch { return d } };
