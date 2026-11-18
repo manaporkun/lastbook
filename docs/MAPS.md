@@ -115,6 +115,7 @@ issue before any code.
 [REGIONS-ES.md](REGIONS-ES.md) does the same for Spain's 17 autonomous communities and its two autonomous cities.
 [REGIONS-FR.md](REGIONS-FR.md) does the same for France's 18 regions, with figures from a trial build.
 [MAP-DE-STG.md](MAP-DE-STG.md) does the same for one German city, Stuttgart (`DE-STG`), with the `de-1` address scheme.
+[MAP-TR-34.md](MAP-TR-34.md) describes a working offline map builder for Istanbul (`TR-34`), whose `tr-1` scheme is a second data entry in the same registry.
 
 ## Checking a map change
 
