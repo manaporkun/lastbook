@@ -92,7 +92,7 @@ class Scheme:
     def __init__(self, chars, words, markers=(), number_pick='first', skip_after=(),
                  number=r'\d{1,4}[a-z]?', postcode=r'\d{5}', postcode_policy='strict',
                  street_kinds=(), form_suffixes=(), place_stop=(), name='{street} {num}',
-                 min_street=3):
+                 min_street=3, fts_pairs=()):
         if number_pick not in ('first', 'last'):
             raise ValueError(f'unknown number_pick {number_pick!r}')
         if postcode_policy not in ('strict', 'district-loose'):
@@ -110,6 +110,7 @@ class Scheme:
         self.place_stop = place_stop
         self.name = name
         self.min_street = min_street
+        self.fts_pairs = fts_pairs
 
     def fold(self, text):
         """Map the scheme's letters, lower-case, and drop any other accents."""
@@ -195,6 +196,23 @@ class Scheme:
             forms += [f'{base} {suffix}' for suffix in self.form_suffixes]
         return list(dict.fromkeys(forms))
 
+    def fts_variants(self, word):
+        """Spellings of one word for the place finder's FTS index.
+
+        SQLite unicode61 folds most accents but keeps some letters distinct (dotless ı is not i);
+        fts_pairs names those letters, so an ASCII query still matches the stored spelling."""
+        if not self.fts_pairs:
+            return [word]
+        base = self.fold(word)
+        variants = [base]
+        for folded, native in self.fts_pairs:
+            positions = [index for index, char in enumerate(base) if char == folded][:3]
+            for index in positions:
+                variants += [item[:index] + native + item[index + 1:] for item in variants[:]]
+        if word not in variants:
+            variants.insert(0, word)
+        return list(dict.fromkeys(variants))
+
     def place_matches(self, qualifier, city, district):
         words = [word for word in self.normalize(qualifier).split() if word not in self.place_stop]
         if not words:
@@ -215,6 +233,25 @@ SCHEMES = {
         form_suffixes=('str',),
         place_stop=('deutschland', 'de'),                # country only: a city name here would hide another city's houses
     ),
+    'tr-1': Scheme(
+        chars={'İ': 'i', 'I': 'i', 'ı': 'i', 'Ğ': 'g', 'ğ': 'g', 'Ü': 'u', 'ü': 'u',
+               'Ş': 's', 'ş': 's', 'Ö': 'o', 'ö': 'o', 'Ç': 'c', 'ç': 'c',
+               'Â': 'a', 'â': 'a', 'Î': 'i', 'î': 'i', 'Û': 'u', 'û': 'u'},
+        words={'cadde': 'cd', 'caddesi': 'cd', 'cad': 'cd',
+               'sokak': 'sk', 'sokagi': 'sk', 'sok': 'sk',
+               'bulvar': 'blv', 'bulvari': 'blv', 'bulv': 'blv',
+               'meydan': 'myd', 'meydani': 'myd', 'meyd': 'myd',
+               'mahalle': 'mh', 'mahallesi': 'mh', 'mah': 'mh',
+               'yolu': 'yol'},
+        markers=('no',),
+        number_pick='last',                              # street names may start with a number ('19 Mayıs Caddesi 135')
+        number=r'\d+[a-z]?',
+        street_kinds=('cd', 'sk', 'blv', 'myd'),
+        form_suffixes=('cd', 'sk', 'blv'),
+        place_stop=('istanbul', 'tr', 'mh'),
+        name='{street} No: {num}',
+        fts_pairs=(('i', 'ı'),),
+    ),
 }
 
 
@@ -223,10 +260,43 @@ def normalize_as(norm, text):
     return SCHEMES[norm].normalize(text)
 
 
+def fold_as(norm, text):
+    """Fold letters the way scheme `norm` does, without its street-word shortening."""
+    return SCHEMES[norm].fold(text)
+
+
+def fold_any(text, geo_directory=None):
+    """Fold letters for place-name comparison, using the installed locale when known."""
+    schemes = [scheme for _, scheme in _installed_schemes(geo_directory)] if geo_directory else []
+    if len(schemes) == 1:
+        return schemes[0].fold(text)
+    for scheme in reversed(schemes or list(SCHEMES.values())):
+        text = scheme.fold(text)
+    return text
+
+
+_REGION_NORM = {'DE': 'de-1', 'TR': 'tr-1'}
+
+
 def _installed_schemes(geo_directory):
-    """(norm, scheme) pairs some installed index declares, in registry order."""
-    installed = {_index_info(path)[0] for path in sorted((Path(geo_directory) / 'addresses').glob('*.sqlite'))}
+    """(norm, scheme) pairs some installed index or region map declares, in registry order."""
+    geo_directory = Path(geo_directory)
+    installed = {_index_info(path)[0] for path in sorted((geo_directory / 'addresses').glob('*.sqlite'))}
+    for name in ('places.sqlite', 'national.sqlite'):
+        path = geo_directory / name
+        if path.is_file():
+            norm, _ = _index_info(path)
+            if norm in SCHEMES:
+                installed.add(norm)
     return [(norm, scheme) for norm, scheme in SCHEMES.items() if norm in installed]
+
+
+def fts_variants(word, geo_directory):
+    """Spellings to try for one place-finder word, from the installed indexes' schemes."""
+    variants = [word]
+    for _, scheme in _installed_schemes(geo_directory):
+        variants += scheme.fts_variants(word)
+    return list(dict.fromkeys(variants))
 
 
 def is_postcode_place_query(query, geo_directory):
@@ -356,12 +426,14 @@ def _index_info(path):
         try:
             connection = sqlite3.connect(ro_uri(path), uri=True)
             try:
-                meta = dict(connection.execute("SELECT key,value FROM meta WHERE key IN ('norm','source')").fetchall())
+                meta = dict(connection.execute("SELECT key,value FROM meta WHERE key IN ('norm','source','region')").fetchall())
             finally:
                 connection.close()
         except sqlite3.Error:
             pass
-        cached = (stamp, (meta.get('norm') or US_NORM, meta.get('source')))
+        region = meta.get('region') or ''
+        norm = meta.get('norm') or (_REGION_NORM.get(region.split('-', 1)[0]) if isinstance(region, str) else None) or US_NORM
+        cached = (stamp, (norm, meta.get('source')))
         _INFO[str(path)] = cached
     return cached[1]
 

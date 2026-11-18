@@ -1411,19 +1411,26 @@ def places(q, limit=20, near=None):
         return []
     rows = []
     full = False
-    for ws in word_sets(words):
-        if full and len(ws) < len(words):
-            break  # every word matched somewhere: no need to loosen
-        if not ws:
-            continue
-        rows += db.execute('SELECT p.name,p.kind,p.detail,p.lat,p.lon,p.rank,p.source FROM place_fts f JOIN place p ON p.id=f.rowid '
-                           'WHERE place_fts MATCH ? ORDER BY p.rank, bm25(place_fts) LIMIT 200',
-                           (' '.join('"%s"*' % w.replace('"', '') for w in ws),)).fetchall()
-        if len(ws) == len(words):
-            full = bool(rows)
+    try:
+        for ws in word_sets(words):
+            if full and len(ws) < len(words):
+                break  # every word matched somewhere: no need to loosen
+            if not ws:
+                continue
+            expr = ' AND '.join(
+                ('(' + ' OR '.join('"%s"*' % v.replace('"', '') for v in address_search.fts_variants(w, HERE / 'derived' / 'geo')) + ')')
+                if len(address_search.fts_variants(w, HERE / 'derived' / 'geo')) > 1 else '"%s"*' % w.replace('"', '')
+                for w in ws)
+            rows += db.execute('SELECT p.name,p.kind,p.detail,p.lat,p.lon,p.rank,p.source FROM place_fts f JOIN place p ON p.id=f.rowid '
+                               'WHERE place_fts MATCH ? ORDER BY p.rank, bm25(place_fts) LIMIT 200',
+                               (expr,)).fetchall()
+            if len(ws) == len(words):
+                full = bool(rows)
+    finally:
+        db.close()
     rows = list(dict.fromkeys(rows))
     def norm(t):
-        return ' '.join(re.sub(r'\bsaint\b', 'st', re.sub(r'[^\w ]+', ' ', t.lower())).split())
+        return ' '.join(re.sub(r'\bsaint\b', 'st', re.sub(r'[^\w ]+', ' ', address_search.fold_any(t, HERE / 'derived' / 'geo'))).split())
     ql = norm(q)
     nat = national_mapdb()
     size = {}
